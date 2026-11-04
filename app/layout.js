@@ -2,16 +2,16 @@ import "./globals.css";
 
 export const metadata = {
   description:
-    "FreshBite is a simple, clean food shop menu. Browse 12 fresh dishes — burgers, pizza and pasta, Asian plates, healthy bowls and desserts — by category.",
+    "FreshBite is a food menu with 12 dishes: burgers, pizza and pasta, Asian plates, healthy bowls, and desserts. Browse by category, search by name, and sort by price or rating.",
   keywords: ["food shop", "menu", "burgers", "pizza", "pasta", "sushi", "ramen", "salad", "desserts", "FreshBite"],
   openGraph: {
     description:
-      "Browse 12 fresh dishes — burgers, pizza and pasta, Asian plates, healthy bowls and desserts — by category.",
+      "Browse 12 dishes: burgers, pizza and pasta, Asian plates, healthy bowls, and desserts. Filter by category, search by name, and sort by price or rating.",
     locale: "en_US",
-    title: "FreshBite — Simple, Fresh Food Shop",
+    title: "FreshBite — Food Menu",
     type: "website",
   },
-  title: "FreshBite — Simple, Fresh Food Shop",
+  title: "FreshBite — Food Menu",
 };
 
 export default function RootLayout({ children }) {

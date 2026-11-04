@@ -1,11 +1,11 @@
-# FreshBite — Food Shop
+# FreshBite — Food Menu
 
-A simple, clean food shop menu built with Next.js and plain CSS.
+A food menu built with Next.js and plain CSS.
 
 - 12 dishes with prices and ratings
 - Browse by category: All, Main, Asian, Healthy, Desserts
 - Search dishes by name, sort by price or rating, and open any dish for its full details
-- Display only — no cart, no checkout, no ordering
+- Browsing only — it does not take orders
 
 Run it:
 
