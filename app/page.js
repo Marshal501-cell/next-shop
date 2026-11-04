@@ -43,7 +43,7 @@ export default function Home() {
       <main className="container" id="menu">
         <div className="filters">
           {CATEGORIES.map((c) => (
-            <button key={c} className={category === c ? "filter active" : "filter"} onClick={() => setCategory(c)}>
+            <button key={c} aria-pressed={category === c} className={category === c ? "filter active" : "filter"} onClick={() => setCategory(c)}>
               {c}
             </button>
           ))}
