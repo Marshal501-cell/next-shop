@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CATEGORIES = ["All", "Main", "Asian", "Healthy", "Desserts"];
 
@@ -40,7 +40,14 @@ function handleImageError(event) {
   if (!event.currentTarget.dataset.fallback) {
     event.currentTarget.dataset.fallback = "1";
     event.currentTarget.src = FALLBACK_IMAGE;
+  } else {
+    event.currentTarget.style.visibility = "hidden";
   }
+}
+
+function ratingStars(rating) {
+  const full = Math.floor(rating);
+  return "★".repeat(full) + "☆".repeat(5 - full);
 }
 
 export default function Home() {
@@ -48,15 +55,75 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("featured");
   const [selected, setSelected] = useState(null);
+  const [modalClosing, setModalClosing] = useState(false);
+  const modalRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const lastFocusedRef = useRef(null);
+
+  const closeModal = () => {
+    if (modalClosing) return;
+    setModalClosing(true);
+    window.setTimeout(() => {
+      setSelected(null);
+      setModalClosing(false);
+    }, 240);
+  };
 
   useEffect(() => {
     if (!selected) return;
+    lastFocusedRef.current = document.activeElement;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
     const onKeyDown = (event) => {
-      if (event.key === "Escape") setSelected(null);
+      if (event.key === "Escape") {
+        closeModal();
+        return;
+      }
+      if (event.key !== "Tab" || !modalRef.current) return;
+      const focusable = modalRef.current.querySelectorAll(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+      if (lastFocusedRef.current instanceof HTMLElement) {
+        lastFocusedRef.current.focus();
+      }
+    };
   }, [selected]);
+
+  useEffect(() => {
+    const elements = document.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window)) {
+      elements.forEach((element) => element.classList.add("is-visible"));
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: "0px 0px -40px 0px", threshold: 0.12 }
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [category, query, sort]);
 
   const search = query.trim().toLowerCase();
   const filtered = PRODUCTS.filter((product) => {
@@ -73,10 +140,10 @@ export default function Home() {
   };
 
   return (
-    <div>
+    <div id="top">
       <a className="skip-link" href="#menu">Skip to menu</a>
       <header className="header">
-        <a className="logo" href="#">Fresh<span>Bite</span></a>
+        <a className="logo" href="#top">Fresh<span>Bite</span></a>
         <nav>
           <a href="#menu">Menu</a>
           <a href="#about">About</a>
@@ -95,7 +162,7 @@ export default function Home() {
         </div>
       </section>
 
-      <main className="container" id="menu">
+      <main className="container" id="menu" tabIndex={-1}>
         <div className="menu-heading">
           <h2>Our menu</h2>
           <p aria-live="polite">Showing {visible.length} of {PRODUCTS.length} dishes</p>
@@ -140,23 +207,24 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid">
-            {visible.map((product) => (
-              <article className="card" key={product.name}>
-                <div className="card-image">
-                  <img alt={product.name} loading="lazy" onError={handleImageError} src={product.image} />
-                  <span className="rating-badge" aria-label={`Rated ${product.rating} out of 5`}><span aria-hidden="true">★</span> {product.rating}</span>
-                </div>
-                <div className="card-body">
-                  <span className="tag">{product.category}</span>
-                  <h2>{product.name}</h2>
-                  <p>{product.description}</p>
-                  <div className="price-row">
-                    <strong className="price">${product.price.toFixed(2)}</strong>
-                    <span className="price-note">Menu item</span>
+            {visible.map((product, index) => (
+              <article className="card reveal" key={product.name} style={{ "--reveal-delay": `${Math.min(index, 11) * 60}ms` }}>
+                <div className="card-tilt">
+                  <div className="card-image">
+                    <img alt={product.name} loading="lazy" onError={handleImageError} src={product.image} />
+                    <span className="rating-badge" aria-label={`Rated ${product.rating} out of 5`}><span aria-hidden="true">{ratingStars(product.rating)}</span> {product.rating.toFixed(1)}</span>
                   </div>
-                  <button className="details-button" onClick={() => setSelected(product)}>
-                    View details
-                  </button>
+                  <div className="card-body">
+                    <span className="tag">{product.category}</span>
+                    <h2>{product.name}</h2>
+                    <p>{product.description}</p>
+                    <div className="price-row">
+                      <strong className="price">${product.price.toFixed(2)}</strong>
+                    </div>
+                    <button className="details-button" onClick={() => setSelected(product)}>
+                      View details
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -165,22 +233,23 @@ export default function Home() {
       </main>
 
       {selected && (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
+        <div className={modalClosing ? "modal-backdrop is-closing" : "modal-backdrop"} onClick={closeModal}>
           <div
-            className="modal"
+            className={modalClosing ? "modal is-closing" : "modal"}
+            ref={modalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dish-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <button className="modal-close" onClick={() => setSelected(null)} aria-label="Close details">×</button>
+            <button className="modal-close" ref={closeButtonRef} onClick={closeModal} aria-label="Close details">×</button>
             <img alt={selected.name} onError={handleImageError} src={selected.image} />
             <div className="modal-body">
               <span className="tag">{selected.category}</span>
               <h2 id="dish-title">{selected.name}</h2>
               <p>{selected.description}</p>
               <p className="modal-meta">
-                <span aria-label={`Rated ${selected.rating} out of 5`}><span aria-hidden="true">★</span> {selected.rating} rating</span>
+                <span aria-label={`Rated ${selected.rating} out of 5`}><span aria-hidden="true">{ratingStars(selected.rating)}</span> {selected.rating.toFixed(1)} rating</span>
                 <strong>${selected.price.toFixed(2)}</strong>
               </p>
             </div>
