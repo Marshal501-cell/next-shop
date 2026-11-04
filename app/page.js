@@ -56,9 +56,82 @@ export default function Home() {
   const [sort, setSort] = useState("featured");
   const [selected, setSelected] = useState(null);
   const [modalClosing, setModalClosing] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [theme, setTheme] = useState("light");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactSent, setContactSent] = useState(false);
+  const [cart, setCart] = useState([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const modalRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const cartRef = useRef(null);
+  const cartCloseButtonRef = useRef(null);
   const lastFocusedRef = useRef(null);
+  const cartLastFocusedRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("freshbite-favorites");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setFavorites(parsed.filter((name) => PRODUCTS.some((product) => product.name === name)));
+        }
+      }
+    } catch {
+      setFavorites([]);
+    }
+    setFavoritesLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!favoritesLoaded) return;
+    try {
+      window.localStorage.setItem("freshbite-favorites", JSON.stringify(favorites));
+    } catch {
+      return;
+    }
+  }, [favorites, favoritesLoaded]);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("freshbite-theme") === "dark") {
+        setTheme("dark");
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    } catch {
+      return;
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    try {
+      window.localStorage.setItem("freshbite-theme", next);
+    } catch {
+      return;
+    }
+  };
+
+  const toggleFavorite = (name) => {
+    setFavorites((current) =>
+      current.includes(name) ? current.filter((item) => item !== name) : [...current, name]
+    );
+  };
+
+  const clearPriceFilter = () => {
+    setMinPrice("");
+    setMaxPrice("");
+  };
 
   const closeModal = () => {
     if (modalClosing) return;
@@ -67,6 +140,123 @@ export default function Home() {
       setSelected(null);
       setModalClosing(false);
     }, 240);
+  };
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("freshbite-cart");
+      if (!stored) {
+        setCartLoaded(true);
+        return;
+      }
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) {
+        setCartLoaded(true);
+        return;
+      }
+      const restored = parsed
+        .filter((entry) => entry && typeof entry.name === "string" && Number.isInteger(entry.qty))
+        .filter((entry) => PRODUCTS.some((product) => product.name === entry.name))
+        .map((entry) => ({ name: entry.name, qty: Math.min(99, Math.max(1, entry.qty)) }));
+      const merged = [];
+      restored.forEach((entry) => {
+        const existing = merged.find((item) => item.name === entry.name);
+        if (existing) {
+          existing.qty = Math.min(99, existing.qty + entry.qty);
+        } else {
+          merged.push(entry);
+        }
+      });
+      setCart(merged);
+    } catch {
+      setCart([]);
+    }
+    setCartLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cartLoaded) return;
+    try {
+      window.localStorage.setItem("freshbite-cart", JSON.stringify(cart));
+    } catch {
+      return;
+    }
+  }, [cart, cartLoaded]);
+
+  useEffect(() => {
+    if (!cartOpen) return;
+    cartLastFocusedRef.current = document.activeElement;
+    document.body.style.overflow = "hidden";
+    cartCloseButtonRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setCartOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !cartRef.current) return;
+      const focusable = cartRef.current.querySelectorAll(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (!selected) {
+        document.body.style.overflow = "";
+      }
+      if (cartLastFocusedRef.current instanceof HTMLElement) {
+        cartLastFocusedRef.current.focus();
+      }
+    };
+  }, [cartOpen, selected]);
+
+  const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
+  const cartTotal = cart.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.name === item.name);
+    return product ? sum + product.price * item.qty : sum;
+  }, 0);
+
+  const cartQty = (name) => {
+    const item = cart.find((entry) => entry.name === name);
+    return item ? item.qty : 0;
+  };
+
+  const addToCart = (product) => {
+    setCart((current) => {
+      const existing = current.find((item) => item.name === product.name);
+      if (existing) {
+        return current.map((item) =>
+          item.name === product.name ? { ...item, qty: Math.min(99, item.qty + 1) } : item
+        );
+      }
+      return [...current, { name: product.name, qty: 1 }];
+    });
+  };
+
+  const changeQty = (name, delta) => {
+    setCart((current) =>
+      current
+        .map((item) => (item.name === name ? { ...item, qty: item.qty + delta } : item))
+        .filter((item) => item.qty > 0)
+    );
+  };
+
+  const removeFromCart = (name) => {
+    setCart((current) => current.filter((item) => item.name !== name));
+  };
+
+  const clearCart = () => {
+    setCart([]);
   };
 
   useEffect(() => {
@@ -123,13 +313,22 @@ export default function Home() {
     );
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, [category, query, sort]);
+  }, [category, query, sort, favoritesOnly, minPrice, maxPrice]);
 
   const search = query.trim().toLowerCase();
+  const parsedMin = minPrice === "" ? null : Number(minPrice);
+  const parsedMax = maxPrice === "" ? null : Number(maxPrice);
+  const lowPrice = parsedMin !== null && !Number.isNaN(parsedMin) ? parsedMin : null;
+  const highPrice = parsedMax !== null && !Number.isNaN(parsedMax) ? parsedMax : null;
+  const effectiveMin = lowPrice !== null && highPrice !== null && lowPrice > highPrice ? highPrice : lowPrice;
+  const effectiveMax = lowPrice !== null && highPrice !== null && lowPrice > highPrice ? lowPrice : highPrice;
   const filtered = PRODUCTS.filter((product) => {
     const inCategory = category === "All" || product.category === category;
     const inSearch = search === "" || product.name.toLowerCase().includes(search);
-    return inCategory && inSearch;
+    const inFavorites = !favoritesOnly || favorites.includes(product.name);
+    const aboveMin = effectiveMin === null || product.price >= effectiveMin;
+    const belowMax = effectiveMax === null || product.price <= effectiveMax;
+    return inCategory && inSearch && inFavorites && aboveMin && belowMax;
   });
   const visible = sortProducts(filtered, sort);
 
@@ -137,6 +336,8 @@ export default function Home() {
     setCategory("All");
     setQuery("");
     setSort("featured");
+    setFavoritesOnly(false);
+    clearPriceFilter();
   };
 
   return (
@@ -150,8 +351,13 @@ export default function Home() {
               <a href="#top">Home</a>
               <a href="#menu">Menu</a>
               <a href="#about">About</a>
+              <a href="#contact">Contact</a>
             </nav>
+            <button className="theme-toggle" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} aria-pressed={theme === "dark"} onClick={toggleTheme}>{theme === "dark" ? "☀️ Light" : "🌙 Dark"}</button>
             <a className="header-cta" href="#menu">Browse Menu</a>
+            <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={cartCount === 0 ? "Open cart, empty" : `Open cart, ${cartCount} items`}>
+              Cart {cartCount > 0 && <span className="cart-count" aria-hidden="true">{cartCount}</span>}
+            </button>
           </div>
         </div>
       </header>
@@ -172,6 +378,7 @@ export default function Home() {
         <div className="menu-heading">
           <h2>Our menu</h2>
           <p aria-live="polite">Showing {visible.length} of {PRODUCTS.length} dishes</p>
+          <button className="print-button" onClick={() => window.print()} type="button">Print menu</button>
         </div>
 
         <div className="controls">
@@ -192,9 +399,23 @@ export default function Home() {
               ))}
             </select>
           </label>
+          <label className="control">
+            <span>Min price ($)</span>
+            <input min="0" onChange={(event) => setMinPrice(event.target.value)} placeholder="No minimum" step="0.5" type="number" value={minPrice} />
+          </label>
+          <label className="control">
+            <span>Max price ($)</span>
+            <input min="0" onChange={(event) => setMaxPrice(event.target.value)} placeholder="No maximum" step="0.5" type="number" value={maxPrice} />
+          </label>
+          {(minPrice !== "" || maxPrice !== "") && (
+            <button className="filter price-clear" onClick={clearPriceFilter} type="button">Clear price filter</button>
+          )}
         </div>
 
         <div className="filters" role="group" aria-label="Filter by category">
+          <button aria-pressed={favoritesOnly} className={favoritesOnly ? "filter active" : "filter"} onClick={() => setFavoritesOnly(!favoritesOnly)} type="button">
+            ♥ Favorites <span className="count">{favorites.length}</span>
+          </button>
           {CATEGORIES.map((c) => {
             const count = c === "All" ? PRODUCTS.length : PRODUCTS.filter((p) => p.category === c).length;
             return (
@@ -208,7 +429,7 @@ export default function Home() {
         {visible.length === 0 ? (
           <div className="empty">
             <h2>No dishes found</h2>
-            <p>No dish matches your search and filters. Try a different name or category.</p>
+            <p>No dish matches your search and filters. Try a different name, category, price range, or favorites filter.</p>
             <button className="button" onClick={clearFilters}>Clear search and filters</button>
           </div>
         ) : (
@@ -217,8 +438,11 @@ export default function Home() {
               <article className="card reveal" key={product.name} style={{ "--reveal-delay": `${Math.min(index, 11) * 60}ms` }}>
                 <div className="card-tilt">
                   <div className="card-image">
-                    <img alt={product.name} loading="lazy" onError={handleImageError} src={product.image} />
+                    <img alt={product.name} decoding="async" loading="lazy" onError={handleImageError} src={product.image} />
                     <span className="rating-badge" aria-label={`Rated ${product.rating} out of 5`}><span aria-hidden="true">{ratingStars(product.rating)}</span> {product.rating.toFixed(1)}</span>
+                    <button aria-label={favorites.includes(product.name) ? `Remove ${product.name} from favorites` : `Add ${product.name} to favorites`} aria-pressed={favorites.includes(product.name)} className={favorites.includes(product.name) ? "favorite-button active" : "favorite-button"} onClick={() => toggleFavorite(product.name)} type="button">
+                      <span aria-hidden="true">{favorites.includes(product.name) ? "♥" : "♡"}</span>
+                    </button>
                   </div>
                   <div className="card-body">
                     <span className="tag">{product.category}</span>
@@ -227,9 +451,17 @@ export default function Home() {
                     <div className="price-row">
                       <strong className="price">${product.price.toFixed(2)}</strong>
                     </div>
-                    <button className="details-button" onClick={() => setSelected(product)}>
-                      View details
-                    </button>
+                    <div className="card-actions">
+                      <button className="details-button" onClick={() => setSelected(product)}>
+                        View details
+                      </button>
+                      <button className="add-button" onClick={() => addToCart(product)} aria-label={`Add ${product.name} to cart`}>
+                        Add to cart
+                      </button>
+                    </div>
+                    {cartQty(product.name) > 0 && (
+                      <p className="in-cart">In cart: {cartQty(product.name)}</p>
+                    )}
                   </div>
                 </div>
               </article>
@@ -237,6 +469,61 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      <div className="print-menu">
+        <h2>FreshBite Menu</h2>
+        {PRODUCTS.map((product) => (
+          <div className="print-item" key={product.name}>
+            <div className="print-item-top">
+              <strong>{product.name}</strong>
+              <span>${product.price.toFixed(2)}</span>
+            </div>
+            <p>{product.category} · Rated {product.rating.toFixed(1)} out of 5</p>
+            <p>{product.description}</p>
+          </div>
+        ))}
+      </div>
+
+      <section className="contact-section" id="contact">
+        <h2>Contact FreshBite</h2>
+        <p>Questions about the menu? Send a message below.</p>
+        <div className="contact-grid">
+          <div className="contact-info">
+            <p>Demo contact details (sample only, not a real business):</p>
+            <p><strong>Email:</strong> hello@freshbite.example</p>
+            <p><strong>Phone:</strong> +1 (555) 010-1234</p>
+            <p>These sample details are placeholders for this demo shop only.</p>
+          </div>
+          <form
+            className="contact-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setContactSent(true);
+              setContactName("");
+              setContactEmail("");
+              setContactMessage("");
+            }}
+          >
+            <label>
+              <span>Name</span>
+              <input onChange={(event) => setContactName(event.target.value)} required type="text" value={contactName} />
+            </label>
+            <label>
+              <span>Email</span>
+              <input onChange={(event) => setContactEmail(event.target.value)} required type="email" value={contactEmail} />
+            </label>
+            <label>
+              <span>Message</span>
+              <textarea onChange={(event) => setContactMessage(event.target.value)} required rows={5} value={contactMessage} />
+            </label>
+            <button className="button contact-submit" type="submit">Send message</button>
+            <p className="contact-note">Demo only: this form does not send your message anywhere and no data is stored or shared.</p>
+            {contactSent && (
+              <p className="contact-success" role="status">Thank you! Your message was received in this demo only. It was not sent anywhere and no data was stored.</p>
+            )}
+          </form>
+        </div>
+      </section>
 
       {selected && (
         <div className={modalClosing ? "modal-backdrop is-closing" : "modal-backdrop"} onClick={closeModal}>
@@ -249,7 +536,7 @@ export default function Home() {
             onClick={(event) => event.stopPropagation()}
           >
             <button className="modal-close" ref={closeButtonRef} onClick={closeModal} aria-label="Close details">×</button>
-            <img alt={selected.name} onError={handleImageError} src={selected.image} />
+            <img alt={selected.name} decoding="async" loading="lazy" onError={handleImageError} src={selected.image} />
             <div className="modal-body">
               <span className="tag">{selected.category}</span>
               <h2 id="dish-title">{selected.name}</h2>
@@ -258,7 +545,70 @@ export default function Home() {
                 <span aria-label={`Rated ${selected.rating} out of 5`}><span aria-hidden="true">{ratingStars(selected.rating)}</span> {selected.rating.toFixed(1)} out of 5</span>
                 <strong>${selected.price.toFixed(2)}</strong>
               </p>
+              <button className="add-button modal-add-button" onClick={() => addToCart(selected)} aria-label={`Add ${selected.name} to cart`}>
+                Add to cart
+              </button>
+              {cartQty(selected.name) > 0 && (
+                <p className="in-cart">In cart: {cartQty(selected.name)}</p>
+              )}
+              <button aria-pressed={favorites.includes(selected.name)} className="details-button" onClick={() => toggleFavorite(selected.name)} type="button">
+                {favorites.includes(selected.name) ? "♥ Saved to favorites" : "♡ Save to favorites"}
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {cartOpen && (
+        <div className="cart-backdrop" onClick={() => setCartOpen(false)}>
+          <div
+            className="cart-drawer"
+            ref={cartRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cart-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="cart-header">
+              <h2 id="cart-title">Your cart</h2>
+              <button className="cart-close" ref={cartCloseButtonRef} onClick={() => setCartOpen(false)} aria-label="Close cart">×</button>
+            </div>
+            <p className="cart-note">Cart preview only. There is no checkout or payment here.</p>
+            {cart.length === 0 ? (
+              <div className="cart-empty">
+                <p>Your cart is empty.</p>
+                <button className="button" onClick={() => setCartOpen(false)}>Browse the menu</button>
+              </div>
+            ) : (
+              <>
+                <ul className="cart-list">
+                  {cart.map((item) => {
+                    const product = PRODUCTS.find((entry) => entry.name === item.name);
+                    if (!product) return null;
+                    return (
+                      <li className="cart-item" key={item.name}>
+                        <img alt={product.name} loading="lazy" onError={handleImageError} src={product.image} />
+                        <div className="cart-item-body">
+                          <strong>{product.name}</strong>
+                          <span>${product.price.toFixed(2)} each</span>
+                          <div className="qty-controls">
+                            <button onClick={() => changeQty(item.name, -1)} aria-label={`Decrease quantity for ${product.name}`}>−</button>
+                            <span aria-label={`Quantity for ${product.name}`}>{item.qty}</span>
+                            <button onClick={() => changeQty(item.name, 1)} aria-label={`Increase quantity for ${product.name}`}>+</button>
+                          </div>
+                          <button className="cart-remove" onClick={() => removeFromCart(item.name)} aria-label={`Remove ${product.name} from cart`}>Remove</button>
+                        </div>
+                        <strong className="cart-line-total">${(product.price * item.qty).toFixed(2)}</strong>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="cart-footer">
+                  <button className="cart-clear" onClick={clearCart}>Clear cart</button>
+                  <p className="cart-total">Total <strong>${cartTotal.toFixed(2)}</strong></p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -269,7 +619,7 @@ export default function Home() {
           <div className="footer-grid">
             <div className="footer-brand">
               <a className="logo footer-logo" href="#top"><span className="logo-mark" aria-hidden="true">F</span>Fresh<span>Bite</span></a>
-              <p>FreshBite is a short, clear food menu. Twelve dishes in five categories, with prices and ratings on every card. Search by name, sort by price or rating, and open any dish for its full description.</p>
+              <p>FreshBite is a short, clear food menu. Twelve dishes in five categories, with prices and ratings on every card. Search by name, sort by price or rating, filter by price range, save favorites, and open any dish for its full description.</p>
               <p>12 dishes · 5 categories · Highest rating 4.9</p>
             </div>
             <nav className="footer-column" aria-label="Explore">
@@ -278,6 +628,7 @@ export default function Home() {
                 <li><a href="#top">Home</a></li>
                 <li><a href="#menu">Menu</a></li>
                 <li><a href="#about">About FreshBite</a></li>
+                <li><a href="#contact">Contact</a></li>
                 <li><a href="#top">Back to top</a></li>
               </ul>
             </nav>
